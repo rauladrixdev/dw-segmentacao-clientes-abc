@@ -1,81 +1,115 @@
-📊 Data Warehouse – Segmentação de Clientes (Curva ABC)
-📌 Objetivo do Projeto
+# DW – Segmentação de Clientes (Curva ABC)
 
-Este projeto simula um cenário real de negócio onde a empresa precisa identificar quais clientes geram maior impacto na receita.
+Projeto de Data Warehouse desenvolvido para simular um cenário real de análise de receita. O objetivo é classificar clientes de acordo com sua representatividade no faturamento usando a metodologia de Curva ABC, aplicada sobre um modelo dimensional simples (Star Schema) em SQL Server.
 
-Foi desenvolvido um modelo dimensional simples (Star Schema) para aplicar a metodologia de Curva ABC e classificar clientes de acordo com sua representatividade no faturamento.
+---
 
-🏗️ Arquitetura do Banco
+## Contexto do Problema
 
-Banco de Dados: DW_SegmentacaoClientes
-Schema: dw
+Empresas que trabalham com múltiplos clientes precisam identificar rapidamente quais deles concentram a maior parte da receita. Sem essa visão, decisões de retenção, campanhas e prioridade de atendimento acabam sendo tomadas sem critério.
 
-Tabelas
+Este projeto resolve isso com uma pipeline analítica simples: dados de vendas são carregados em um DW, processados com Window Functions e classificados em três classes (A, B e C) com base no percentual acumulado de receita.
 
-dw.dim_cliente → Dimensão de clientes
+---
 
-dw.fato_vendas → Fato de vendas
+## Arquitetura
 
-Modelo dimensional com separação entre dimensão e fato, seguindo boas práticas de Data Warehouse.
+**Banco de Dados:** SQL Server  
+**Schema:** `dw`  
+**Modelagem:** Star Schema (Fato + Dimensão)
 
-📂 Estrutura dos Arquivos
+```
+dw.dim_cliente   →   dimensão de clientes
+dw.fato_vendas   →   fato de vendas com chave estrangeira para dim_cliente
+```
 
-00_create_database.sql → Criação do banco
+![Star Schema](Untitled.png)
 
-01_create_structure.sql → Criação de schema e tabelas
+---
 
-02_insert_data.sql → Inserção de dados simulados
+## Estrutura dos Arquivos
 
-03_receita_por_cliente.sql → Receita total por cliente
+```
+├── 00_create_database.sql    # Criação do banco de dados
+├── 01_create_structure.sql   # Schema e tabelas
+├── 02_insert_data.sql        # Dados simulados
+├── 03_receita_por_cliente.sql # Receita total por cliente
+└── 04_curva_abc.sql          # Classificação ABC com percentual acumulado
+```
 
-04_curva_abc.sql → Classificação ABC com percentual acumulado
+---
 
-📈 Análises Desenvolvidas
+## Lógica da Curva ABC
 
-Receita total por cliente
+A classificação é feita com base no percentual acumulado de receita, ordenando os clientes do maior para o menor faturamento:
 
-Receita acumulada (ordenada da maior para menor)
+| Classe | Critério |
+|--------|----------|
+| A | Até 70% da receita acumulada |
+| B | Entre 70% e 90% |
+| C | Acima de 90% |
 
-Percentual acumulado da receita total
+A query principal usa CTE + Window Functions para calcular a receita acumulada e o percentual sem necessidade de subqueries aninhadas:
 
-Classificação dos clientes em:
+```sql
+WITH receita_cliente AS (
+    SELECT
+        c.id_cliente,
+        c.nome,
+        SUM(v.valor_total) AS receita_total
+    FROM dw.fato_vendas v
+    JOIN dw.dim_cliente c ON v.id_cliente = c.id_cliente
+    GROUP BY c.id_cliente, c.nome
+),
+receita_acumulada AS (
+    SELECT
+        id_cliente,
+        nome,
+        receita_total,
+        SUM(receita_total) OVER (ORDER BY receita_total DESC) AS receita_acumulada,
+        SUM(receita_total) OVER ()                            AS receita_geral
+    FROM receita_cliente
+)
+SELECT
+    nome,
+    receita_total,
+    receita_acumulada,
+    CAST(receita_acumulada * 100.0 / receita_geral AS DECIMAL(10,2)) AS percentual_acumulado,
+    CASE
+        WHEN receita_acumulada * 100.0 / receita_geral <= 70 THEN 'Classe A'
+        WHEN receita_acumulada * 100.0 / receita_geral <= 90 THEN 'Classe B'
+        ELSE 'Classe C'
+    END AS classificacao_abc
+FROM receita_acumulada
+ORDER BY receita_total DESC;
+```
 
-Classe A → até 70% da receita acumulada
+---
 
-Classe B → até 90%
+## Técnicas Utilizadas
 
-Classe C → restante
+- Modelagem dimensional (Star Schema)
+- JOIN entre fato e dimensão
+- GROUP BY com agregação
+- CTE (Common Table Expression)
+- Window Functions — `SUM() OVER()`
+- Cálculo de percentual acumulado
+- Classificação condicional com `CASE`
 
-🧠 Técnicas Utilizadas
+---
 
-JOIN
+## Como Executar
 
-GROUP BY
+1. Ter o SQL Server instalado (ou usar o SQL Server Express / Azure Data Studio)
+2. Executar os arquivos na ordem numérica:
+   ```
+   00 → 01 → 02 → 03 → 04
+   ```
+3. O resultado final da Curva ABC estará na saída do arquivo `04_curva_abc.sql`
 
-CTE (Common Table Expression)
+---
 
-Window Functions (SUM OVER)
+## Autor
 
-Cálculo de percentual acumulado
-
-Classificação com CASE
-
-Modelagem dimensional (Fato + Dimensão)
-
-🎯 Aplicação em Negócio
-
-Este modelo pode ser utilizado para:
-
-Identificar clientes estratégicos
-
-Definir campanhas direcionadas
-
-Priorizar retenção de clientes Classe A
-
-Reduzir churn de clientes mais valiosos
-
-Otimizar estratégias comerciais
-
-🚀 Resultado
-
-O projeto demonstra como transformar dados brutos em informação estratégica para tomada de decisão, simulando uma necessidade real de empresas que desejam entender concentração de receita e priorização de clientes.
+**Raul Adriano**  
+[github.com/rauladrixdev](https://github.com/rauladrixdev)
